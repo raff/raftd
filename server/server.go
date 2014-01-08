@@ -138,7 +138,12 @@ func (s *Server) Join(leader string) error {
 	if err != nil {
 		return err
 	}
+
 	resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return fmt.Errorf("http %s", resp.Status)
+    }
 
 	return nil
 }
