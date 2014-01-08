@@ -113,6 +113,8 @@ func (s *Server) ListenAndServe(leader string) error {
 	s.router.HandleFunc("/db/{key}", s.readHandler).Methods("GET")
 	s.router.HandleFunc("/db/{key}", s.writeHandler).Methods("POST")
 	s.router.HandleFunc("/join", s.joinHandler).Methods("POST")
+	s.router.HandleFunc("/peers", s.peersHandler).Methods("GET")
+	s.router.HandleFunc("/leader", s.leaderHandler).Methods("GET")
 
 	log.Println("Listening at:", s.connectionString())
 
@@ -141,9 +143,9 @@ func (s *Server) Join(leader string) error {
 
 	resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        return fmt.Errorf("http %s", resp.Status)
-    }
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("http %s", resp.Status)
+	}
 
 	return nil
 }
@@ -159,6 +161,34 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *Server) peersHandler(w http.ResponseWriter, req *http.Request) {
+	peers := make(map[string]string)
+	for k, v := range s.raftServer.Peers() {
+		peers[k] = v.ConnectionString
+	}
+
+	peers[s.raftServer.Name()] = s.connectionString()
+
+	var b bytes.Buffer
+	json.NewEncoder(&b).Encode(peers)
+	w.Write(b.Bytes())
+}
+
+func (s *Server) leaderHandler(w http.ResponseWriter, req *http.Request) {
+	var connectionString string
+
+	leader := s.raftServer.Leader()
+	if leader == s.raftServer.Name() {
+		connectionString = s.connectionString()
+	} else {
+		connectionString = s.raftServer.Peers()[leader].ConnectionString
+	}
+
+	var b bytes.Buffer
+	json.NewEncoder(&b).Encode(map[string]string{leader: connectionString})
+	w.Write(b.Bytes())
 }
 
 func (s *Server) readHandler(w http.ResponseWriter, req *http.Request) {
